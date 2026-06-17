@@ -23,3 +23,6 @@ target
 # Local config (contains API keys)
 .mcp.json
 .env
+
+# Claude Code local install (skills, settings)
+.claude/
