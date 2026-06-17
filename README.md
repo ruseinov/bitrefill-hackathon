@@ -55,7 +55,7 @@ The skill then runs the 7-step flow from `SKILL.md`:
 3. **Pick product (MCP)** — `search-products` → `get-product-details` for price + accepted
    `payment_methods`.
 4. **Market (REST)** — `GET /agents/{id}/market` for per-asset μ, units, USD value.
-5. **Choose the loser** — among held crypto that the product accepts, prefer those whose holdings
+5. **Choose the worst peforming crypto** — among held crypto that the product accepts, prefer those whose holdings
    cover the price (×1.02 buffer) and pick `min(μ)`; otherwise fall back to the outright worst performer
    with a shortfall warning.
 6. **Confirm + buy (MCP)** — the agent **stops for your explicit approval**, then `buy-products`
