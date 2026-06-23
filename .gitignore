@@ -27,5 +27,8 @@ target
 # Claude Code local install (skills, settings)
 .claude/
 
+# qupick runtime config (real agentId / email); commit config.example.json instead
+skills/qupick/config.json
+
 # Python venv
 .venv/

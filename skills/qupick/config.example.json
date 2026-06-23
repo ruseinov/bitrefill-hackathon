@@ -1,0 +1,16 @@
+{
+  "agentId": null,
+  "defaults": {
+    "name": "Your Name",
+    "email": "you@example.com",
+    "country": "US",
+    "sliders": { "rebalanceFrequency": 50, "riskPreference": 50, "maxPositionSize": 50 }
+  },
+  "funding": {
+    "priority": ["account_match", "onchain_match", "account_fiat"],
+    "fee_buffer_pct": 2,
+    "on_shortfall": "reject"
+  },
+  "denomination": { "policy": "smallest_gte" },
+  "backend": { "marketDataSource": "synthetic" }
+}

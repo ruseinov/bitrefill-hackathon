@@ -10,9 +10,13 @@ Purchase mechanics are delegated to the sibling [`bitrefill`](skills/bitrefill/S
 
 - The **portfolio backend** running locally on `http://127.0.0.1:8000` (see below).
 - The **Bitrefill MCP** connected (`https://api.bitrefill.com/mcp`, OAuth or API key), or the
-  Bitrefill REST API key — used for product search and invoice creation.
-- A funded Lightning / crypto wallet to actually pay the invoice. Bitrefill account `balance` is not
-  required (invoices are paid from your own wallet).
+  Bitrefill REST API key — used for product search, balance reads, and invoice creation.
+- A funding source the waterfall can draw on: a pre-funded **Bitrefill account balance** (USD, EUR,
+  and/or the loser asset) and/or a funded on-chain wallet for the loser asset. The funding order is
+  configurable (see [Configure](#configure)).
+- A **`skills/qupick/config.json`** — copy `skills/qupick/config.example.json` and fill it in. Without
+  it the skill still runs, but fully interactively (it asks for name, denomination, and pays on-chain
+  only).
 
 ## Install the skill
 
@@ -27,7 +31,44 @@ cp -R skills/bitrefill     .claude/skills/
 
 `.claude/` is gitignored — this is a local install, not committed.
 
+## Configure
+
+Copy the example config and edit it:
+
+```bash
+cp skills/qupick/config.example.json skills/qupick/config.json
+```
+
+`config.json` is gitignored (it holds your real `agentId` / email). Fields:
+
+| Field | Purpose |
+|-------|---------|
+| `agentId` | Reuse an existing portfolio agent. `null` → the skill creates one and writes the id back. |
+| `defaults` | `name` / `email` / `country` / `sliders` used when creating a new agent. |
+| `funding.priority` | Settlement order. Default `["account_match", "onchain_match", "account_fiat"]`. |
+| `funding.fee_buffer_pct` | Coverage buffer over the sticker price (default `2`). |
+| `funding.on_shortfall` | `reject` (stop) or `confirm` (warn and ask) when nothing covers the price. |
+| `denomination.policy` | `smallest_gte` auto-picks the smallest package ≥ the requested amount. |
+| `backend.marketDataSource` | `MARKET_DATA_SOURCE` used when the skill auto-starts the backend. Default `synthetic` (offline, deterministic). |
+
+**Funding waterfall.** The worst performer (`min(μ)`) is *always* computed. The bill is then settled by
+the first source in `funding.priority` that covers the price:
+
+- `account_match` — Bitrefill account balance held in the loser asset → sells the loser → **retunes**.
+- `onchain_match` — on-chain wallet holdings of the loser asset → sells the loser → **retunes**.
+- `account_fiat` — Bitrefill USD/EUR balance → settles without selling crypto → **no retune**.
+
+Reorder or drop tokens to change behaviour — e.g. `["account_fiat", "account_match", "onchain_match"]`
+to spend fiat first, or drop `account_fiat` to only ever sell crypto.
+
+This config plus the permission allowlist in `.claude/settings.local.json` make a run stop in **exactly
+one** place — the purchase approval.
+
 ## Run the backend
+
+The skill **health-checks the backend** at the start of a run and, if it's down, **offers to start it**
+for you (backgrounded, with `MARKET_DATA_SOURCE = backend.marketDataSource`, polling until ready). The
+default `synthetic` start command is allowlisted, so a "yes" is the only stop. To run it yourself instead:
 
 ```bash
 cd backend
@@ -46,36 +87,42 @@ Ask the agent in natural language, e.g.:
 
 > "Buy a $20 Steam gift card and pay with my worst-performing crypto."
 
-The skill then runs the 7-step flow from `SKILL.md`:
+The skill then runs the flow from `SKILL.md`:
 
+0. **Read config** — `skills/qupick/config.json` (agent id, defaults, funding order). Missing/malformed
+   → fully interactive fallback, no crash.
 1. **Available currencies** — static map of Bitrefill-payable crypto (BTC, ETH, BNB, SOL, XRP, USDT,
    USDC, DOGE, ZEC, ALGO, FIL).
-2. **Seed agent (REST)** — `POST /agents` over those currencies, then `POST /agents/{id}/optimize`.
-   (Reuses an existing agent via `GET /agents/{id}` if you already have one.)
-3. **Pick product (MCP)** — `search-products` → `get-product-details` for price + accepted
-   `payment_methods`.
+2. **Health-check + seed agent (REST)** — probe the backend; if down, offer to start it. Then reuse
+   `config.agentId` via `GET /agents/{id}`, or `POST /agents` from `config.defaults` then
+   `POST /agents/{id}/optimize` (and write the new id back to the config).
+3. **Pick product (MCP)** — `search-products` → `product-details` for price + accepted
+   `payment_methods`; `denomination.policy` auto-selects the package.
 4. **Market (REST)** — `GET /agents/{id}/market` for per-asset μ, units, USD value.
-5. **Choose the worst peforming crypto** — among held crypto that the product accepts, prefer those whose holdings
-   cover the price (×1.02 buffer) and pick `min(μ)`; otherwise fall back to the outright worst performer
-   with a shortfall warning.
-6. **Confirm + buy (MCP)** — the agent **stops for your explicit approval**, then `buy-products`
-   returns a payment link / Lightning invoice. Pay it; the agent polls to `complete` and surfaces
-   the redemption code.
-7. **Retune (REST)** — `POST /agents/{id}/optimize` with the basket minus the spent ticker.
+5. **Select + fund** — compute the worst performer (`min(μ)`) over held, product-accepted crypto, then
+   read `GET /accounts/balance` and resolve `funding.priority` to the first source covering the price.
+6. **Confirm + buy (MCP)** — the agent **stops for your explicit approval** at a fully-resolved
+   screen (loser + chosen funding source), then buys: instant `balance` pay, or an on-chain link it
+   polls to `complete`. Surfaces the redemption code.
+7. **Retune (REST)** — `POST /agents/{id}/optimize` with the basket minus the spent ticker — **only**
+   when the loser was actually sold (`account_match` / `onchain_match`). Fiat settlement leaves the
+   portfolio unchanged.
 
-### Example (verified run)
+### Example
 
 ```
-Seed → optimize → /market ranked by μ (worst first):
-  BTC   crypto   μ=-0.002567   $230.67   ← worst performer
+/market ranked by μ (worst first):
+  BTC   crypto   μ=-0.002567   $230.67   ← worst performer (always selected)
   SOL   crypto   μ=-0.000341   $225.07
   USDC  crypto   μ=+0.000046   $2272.70
   ETH   crypto   μ=+0.000129   $229.61
 
-Product: Steam USD $20 ($21.60) · accepts bitcoin/ethereum/solana/usdc_base
-Chosen:  BTC (worst performer, holdings cover price) → pay via Lightning
-Invoice: 33,481 sats, status unpaid → pay → complete → redemption code
-Retune:  drop BTC, re-optimize over the remaining 10 currencies
+Product:  Steam USD $20 ($21.60, +2% buffer → $22.03) · accepts bitcoin/ethereum/solana/usdc_base
+Loser:    BTC (μ=-0.0026)
+Waterfall: account_match → Bitrefill account BTC $60 covers $22.03 ✓
+Settle:   Bitrefill account BTC · sells loser ✓ · will retune
+Buy:      payment_method="balance", auto_pay=true → complete → redemption code
+Retune:   drop BTC, re-optimize over the remaining 10 currencies
 ```
 
 ## Safeguards (real money)

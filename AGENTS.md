@@ -56,7 +56,19 @@ Vendored at [`skills/qupick/SKILL.md`](skills/qupick/SKILL.md). Delegates purcha
 
 **Triggers:** "pay with my worst performer", "use my worst crypto to buy X".
 
-**Requires:** portfolio backend running at `http://127.0.0.1:8000`. The skill seeds a new agent over the Bitrefill-payable currencies (BTC, ETH, BNB, SOL, XRP, USDT, USDC, DOGE, ZEC, ALGO, FIL) via `POST /agents` + `POST /agents/{id}/optimize`, or re-uses an existing agent. Uses `GET /agents/{id}/market` to retrieve per-asset μ and holdings, then picks the worst performing crypto that Bitrefill accepts as payment — preferring a candidate whose holdings cover the product price, but falling back to the outright worst performing (with a shortfall warning) when none do. After purchase, retuning drops the spent asset from the basket.
+**Requires:** portfolio backend at `http://127.0.0.1:8000` (the skill health-checks it and, if down, offers to start it backgrounded with `MARKET_DATA_SOURCE = config.backend.marketDataSource`, default `synthetic`), and a local `skills/qupick/config.json` (copy of the committed `config.example.json`; gitignored because it holds the real `agentId` / email). Without the config the skill falls back to fully-interactive, on-chain-only behaviour.
+
+**Selection vs settlement.** The skill always computes the worst performer — `min(μ)` over held crypto that Bitrefill accepts (`GET /agents/{id}/market`, static `PAYMENT_METHOD_MAP`). Selection is never bypassed by funding. It then resolves `config.funding.priority` against live balances (`GET /accounts/balance`) and on-chain holdings, settling against the first source that covers `price × (1 + fee_buffer_pct/100)`:
+
+- `account_match` — Bitrefill account balance in the loser asset → sells loser → **retune**.
+- `onchain_match` — on-chain wallet holdings of the loser asset → sells loser → **retune**.
+- `account_fiat` — Bitrefill USD/EUR balance → no sale → **no retune**.
+
+On shortfall (`funding.on_shortfall`): `reject` stops; `confirm` warns and waits. Retune (drop the spent asset, re-optimize) fires **only** when the loser was actually sold.
+
+**Single human stop.** The flow is built to pause in exactly one place — the purchase approval. `mcp__bitrefill__buy-products` is deliberately kept off the `.claude/settings.local.json` allowlist; `curl` is allowlisted only for the local backend and the read-only `/v2/accounts/balance` endpoint (write the URL first so prefix matching works). A purchase via `curl POST /v2/invoices` is **not** allowlisted and still prompts.
+
+**Agent (re)use:** seeds over the Bitrefill-payable currencies (BTC, ETH, BNB, SOL, XRP, USDT, USDC, DOGE, ZEC, ALGO, FIL) via `POST /agents` + `POST /agents/{id}/optimize`, or re-uses `config.agentId`.
 
 #### `GET /agents/{agent_id}/market`
 
