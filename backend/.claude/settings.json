@@ -1,0 +1,31 @@
+{
+  "enabledMcpjsonServers": [
+    "context7",
+    "qupick"
+  ],
+  "disabledMcpjsonServers": [
+    "auggie"
+  ],
+  "permissions": {
+    "allow": [
+      "Read(//home/konrad/Quip/qubitrefill/skills/qupick/**)",
+      "Read(//home/konrad/Quip/qubitrefill/.claude/skills/qupick/**)",
+      "mcp__qupick__ping_backend",
+      "mcp__qupick__get_agent",
+      "mcp__qupick__get_market",
+      "mcp__qupick__get_leaderboard",
+      "mcp__bitrefill__search-products",
+      "mcp__bitrefill__get-product-details",
+      "mcp__bitrefill__get-invoice-by-id",
+      "mcp__bitrefill__list-invoices",
+      "Bash(curl https://api.bitrefill.com/v2/accounts/balance*)"
+    ],
+    "ask": [
+      "mcp__qupick__optimize",
+      "mcp__qupick__register_agent",
+      "mcp__bitrefill__buy-products",
+      "mcp__bitrefill__submit-prepayment-step",
+      "mcp__bitrefill__update-order"
+    ]
+  }
+}

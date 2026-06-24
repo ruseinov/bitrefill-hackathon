@@ -24,8 +24,18 @@ target
 .mcp.json
 .env
 
-# Claude Code local install (skills, settings)
-.claude/
+# Claude Code local install (skills, settings) — ignore everything under any
+# .claude/ EXCEPT the shared permission allowlist in settings.json.
+# (settings.local.json stays ignored: it's for personal, machine-local overrides.)
+# The first negation re-includes the directory itself, overriding the global
+# ~/.gitignore rule that excludes all of .claude/ — git cannot re-include a file
+# whose parent directory stays excluded.
+!**/.claude/
+**/.claude/*
+!**/.claude/settings.json
+
+# qupick runtime config (real email); commit config.example.json instead
+skills/qupick/config.json
 
 # Python venv
 .venv/
