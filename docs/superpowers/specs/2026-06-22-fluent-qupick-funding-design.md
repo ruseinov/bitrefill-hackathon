@@ -2,7 +2,7 @@
 
 - **Date:** 2026-06-22
 - **Status:** Design approved, pending spec review
-- **Scope:** `skills/qupick/SKILL.md`, a new config file, the Claude Code permission allowlist, and docs. No backend (Python) changes.
+- **Scope:** `skills/qupick/SKILL.md`, a new config file, the Claude Code permission allowlist, and docs. The funding flow itself adds no backend logic, but it now runs against the qupick MCP server backed by the PostgreSQL/API-key backend (per-agent tools authenticate by Bearer key), so the identity and tool surface described here reflect that backend.
 
 ## Problem
 
