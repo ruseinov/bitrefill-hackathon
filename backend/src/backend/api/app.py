@@ -68,7 +68,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="QTW 2026 Trading Game", lifespan=lifespan)
+    app = FastAPI(title="Qubitrefill", lifespan=lifespan)
     app.add_middleware(APIKeyMiddleware)
     app.include_router(routes.router)
 
