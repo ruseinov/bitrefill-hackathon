@@ -1,6 +1,6 @@
 """FastAPI application factory.
 
-Wires the HTTP + WS routers, the API-key middleware, CORS, and a lifespan that
+Wires the HTTP + WS routers, the API-key middleware, and a lifespan that
 initialises the DB (engine + tables) and runs the MTM scheduler. Run locally:
 
     docker compose up -d            # Postgres on :5432
@@ -18,7 +18,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import FastApiMCP
 
 from .. import config
@@ -87,15 +86,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="QTW 2026 Trading Game", lifespan=lifespan)
-    # Added inner-first: APIKeyMiddleware runs inside CORS, so 401s still carry
-    # CORS headers and preflight OPTIONS never hit the auth check.
     app.add_middleware(APIKeyMiddleware)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=list(config.CORS_ORIGINS),
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
     app.include_router(routes.router)
     app.include_router(ws.router)
 

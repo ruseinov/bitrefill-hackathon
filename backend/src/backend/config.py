@@ -131,12 +131,6 @@ SYNTHETIC_SEED: int = 20260625  # booth day — deterministic synthetic history
 # API
 # -----------------------------------------------------------------------------
 
-# Origins allowed by CORS. The deployed MVP plus local dev.
-CORS_ORIGINS: tuple[str, ...] = (
-    "https://qtw-tradinggame.netlify.app",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-)
 QR_BASE_URL: str = "https://qtw-tradinggame.netlify.app"  # /p/{agentId} deep link base
 
 # -----------------------------------------------------------------------------
