@@ -21,6 +21,8 @@ Locked choices that the rest of this doc assumes:
 | **Schema** | Keep startup `create_all` | Fastest to launch; no migration tooling yet (see §7). Re-evaluate before the first schema change. |
 | **Subdomain** | e.g. `qupick.quip.network` | Pointed at the droplet; image pushed to `registry.gitlab.com/quip.network/qupick` (amd64). |
 | **Solvers** | **SA-only for v1 (PoC/MVP)** | `GUROBI_IN_RACE=0` (no Gurobi license in prod) and `DWAVE_API_TOKEN` unset (no QPU cost). Simulated annealing is the entire race field and always runs. Reversible later via env alone — re-add Gurobi or the QPU without a code change or image rebuild. |
+| **Market data** | **Live assets-api** | `MARKET_DATA_SOURCE=assets-api` pointed at `https://asset-tracker.quip.network`, so the μ/Σ inputs reflect real market conditions. Adds a runtime dependency on that service being reachable; `synthetic` stays the offline fallback if it is down or unbuilt. |
+| **Concurrency** | **Scale workers to vCPU** | `WEB_CONCURRENCY` = the droplet's vCPU count. The server is stateless in-process (no background loops), so this is safe; keep `workers × ~15` DB connections under the Supabase pooler cap. |
 
 ---
 
@@ -53,7 +55,7 @@ skill running client-side in Claude Code. Keep the two surfaces separate.
 | 1 | **Supabase Postgres** (company account) | System of record; **stores the API keys** that are the only credential per agent | A `postgresql+asyncpg://…` string for the **session pooler (port 5432)**, in a dedicated project/schema, TLS enabled | Access provisioned by whoever manages the Supabase account. Losing this DB = losing every account — back it up. Don't reuse the `qtw:qtw` dev creds. |
 | 2 | **Resend** (https://resend.com) | Registration emails the API key out-of-band; without working email **registration fails and rolls back** (`routes.py` register handler) | A Resend account with the `quip.network` sending domain **verified** (SPF/DKIM DNS); an API key; username `resend`, host `smtp.resend.com`, port `587`, STARTTLS | Free tier covers transactional volume. Switching relays later is an env change (plain SMTP). |
 | 3 | **D-Wave Leap** (https://cloud.dwavesys.com) | The QPU competitor in the solver race; joins **only when `DWAVE_API_TOKEN` is set** | A Leap account + Solver API token | **QPU time costs real money / quota per job.** Without the token the backend runs SA-only (CPU) and still works. |
-| 4 | **assets-api host** | Live prices for μ/Σ when not synthetic | A reachable base URL for the price service (you stand this up separately) | If you can't host it, ship with `MARKET_DATA_SOURCE=synthetic` (deterministic, offline) and accept fake prices. |
+| 4 | **assets-api host** | Live prices for μ/Σ (the v1 choice — see §0) | The base URL of the running price service (`https://asset-tracker.quip.network`) | If it isn't reachable, fall back to `MARKET_DATA_SOURCE=synthetic` (deterministic, offline) and accept fake prices. |
 | 5 | **DNS + domain** | A subdomain (e.g. `qupick.quip.network`) pointed at the droplet; TLS for the backend (§4) | DNS access for `quip.network` | Caddy gets its certificate for this name; the sender domain is already `quip.network`. |
 | 6 | **Gurobi** (dev only) | Local oracle in the solver race | A license **only on dev machines** | **Not deployed to prod** (licensing). Set `GUROBI_IN_RACE=0` in production. |
 
@@ -84,7 +86,7 @@ secret store, **never** in git or the image.
 | `SMTP_USERNAME` | `resend` | The Resend SMTP login — the literal string `resend` |
 | `EMAIL_FROM` | `Qubitrefill <noreply@quip.network>` | Sender; `quip.network` must be a **verified domain** in Resend |
 | `MARKET_DATA_SOURCE` | `assets-api` | `assets-api` (real) or `synthetic` (offline). Compose overrides to `synthetic` |
-| `ASSETS_API_BASE_URL` | `http://127.0.0.1:8080` | Reachable assets-api URL when source is `assets-api` |
+| `ASSETS_API_BASE_URL` | `http://127.0.0.1:8080` | Set to `https://asset-tracker.quip.network` (the live assets-api) |
 | `GUROBI_IN_RACE` | `1` | Set `0` in production (no Gurobi license there) |
 | `PORT` | `8000` | Internal listen port behind Caddy (e.g. `8080`) |
 | `WEB_CONCURRENCY` | `1` | uvicorn worker count; safe to raise (stateless), keep `workers × ~15` DB conns under the pooler cap |
