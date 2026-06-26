@@ -4,7 +4,7 @@ A single process-wide async engine and ``async_sessionmaker``. ``init_engine``
 is idempotent (it no-ops if already configured) so the API lifespan can call it
 on startup while tests pre-initialise it against a throwaway database with
 ``force=True``. Both the FastAPI dependency (``get_session``) and the
-non-request callers (auth middleware, MTM scheduler) go through ``session_scope``
+non-request caller (the auth middleware) go through ``session_scope``
 / ``get_sessionmaker`` so they all share the same engine.
 """
 
@@ -68,7 +68,7 @@ async def dispose_engine() -> None:
 
 @asynccontextmanager
 async def session_scope() -> AsyncIterator[AsyncSession]:
-    """Standalone session for non-request callers (middleware, scheduler)."""
+    """Standalone session for non-request callers (the auth middleware)."""
     async with get_sessionmaker()() as session:
         yield session
 

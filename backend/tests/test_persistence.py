@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.api.schemas import AgentUpdate, SliderValues
+from backend.api.schemas import SliderValues
 from backend.db.engine import session_scope
 from backend.persistence.agents import AgentRepo, agent_to_config
 from backend.persistence.leaderboard import build_leaderboard
@@ -69,8 +69,8 @@ async def test_leaderboard_ranks_by_total_descending():
         repo = AgentRepo(session)
         low = await _create(repo, "Low")
         high = await _create(repo, "High")
-        await repo.set_valuation(low, AgentUpdate(plUSD=-500.0, plPct=-5.0, total=9_500.0))
-        await repo.set_valuation(high, AgentUpdate(plUSD=2_000.0, plPct=20.0, total=12_000.0))
+        await repo.apply_solve(low, {"BTC": 0.1}, total=9_500.0, provider_type="CPU")
+        await repo.apply_solve(high, {"BTC": 0.2}, total=12_000.0, provider_type="QPU")
         await session.commit()
 
         board = await build_leaderboard(session)

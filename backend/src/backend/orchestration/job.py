@@ -2,7 +2,7 @@
 
 ``solve_portfolio`` takes a plain snapshot (tickers, sliders, current holdings,
 bankroll) and returns the allocation outcome. All DB I/O lives in the async API
-handler (``routes.optimize``) and the MTM scheduler — this function only touches
+handler (``routes.optimize``) — this function only touches
 the market data source and the solvers, so it can be dispatched via
 ``asyncio.to_thread`` without an event loop or DB session.
 

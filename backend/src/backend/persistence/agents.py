@@ -1,9 +1,9 @@
 """Agent repository — async, session-scoped (PostgreSQL via SQLAlchemy).
 
 Replaces the old in-memory ``AgentStore`` singleton. Each request gets an
-``AgentRepo`` bound to its ``AsyncSession`` (via the ``get_session`` dependency);
-the MTM scheduler opens its own session per tick. Holdings are token **units**
-(not USD) so mark-to-market is just units × spot.
+``AgentRepo`` bound to its ``AsyncSession`` (via the ``get_session`` dependency).
+Holdings are token **units** (not USD); valuation is units × spot, recorded on
+each solve.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..api.schemas import AgentConfig, AgentUpdate, SliderValues
+from ..api.schemas import AgentConfig, SliderValues
 from ..db.models import Agent
 
 
@@ -114,11 +114,4 @@ class AgentRepo:
         agent.pl_pct = (agent.pl_usd / agent.bankroll * 100.0) if agent.bankroll else 0.0
         agent.jobs_solved += 1
         agent.primary_provider = provider_type
-        await self.session.flush()
-
-    async def set_valuation(self, agent: Agent, update: AgentUpdate) -> None:
-        """Update the mark-to-market valuation from the MTM loop."""
-        agent.total = update.total
-        agent.pl_usd = update.pl_usd
-        agent.pl_pct = update.pl_pct
         await self.session.flush()

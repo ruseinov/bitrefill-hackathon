@@ -1,8 +1,8 @@
 """Covariance estimator Σ.
 
 Σ is computed on the fixed 30-day hourly window (720 observations), NOT on the
-user's τ-window — it is shared across all agents and refreshed periodically by
-the scheduler (see CLAUDE.md §5.3). This module is pure: it takes a returns
+user's τ-window — it is shared across all agents and recomputed on each solve
+(see CLAUDE.md §5.3). This module is pure: it takes a returns
 matrix and produces the sample covariance.
 """
 

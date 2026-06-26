@@ -1,18 +1,14 @@
 """FastAPI application factory.
 
-Wires the HTTP + WS routers, the API-key middleware, and a lifespan that
-initialises the DB (engine + tables) and runs the MTM scheduler. Run locally:
+Wires the HTTP routes, the API-key middleware, and a lifespan that
+initialises the DB (engine + tables). Run locally:
 
     docker compose up -d            # Postgres on :5432
     uvicorn backend.api.app:app --reload --workers 1
-
-(``--workers 1`` keeps the in-process event bus single-writer; the DB itself is
-shared, so multiple workers would only need a cross-process bus — see TODO.md.)
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -21,17 +17,15 @@ from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP
 
 from .. import config
-from ..db.engine import get_engine, get_sessionmaker, init_engine
+from ..db.engine import get_engine, init_engine
 from ..db.models import Base
-from ..events.bus import get_bus
-from ..orchestration.scheduler import run_mtm_loop
-from . import routes, ws
+from . import routes
 from .auth import APIKeyMiddleware
 
 log = logging.getLogger(__name__)
 
 # The backend curl surface the qupick skill drives, exposed as MCP tools. Names
-# are the routes' operation_ids; WS routes are HTTP-only-ignored by fastapi-mcp.
+# are the routes' operation_ids.
 _MCP_OPERATIONS = [
     "register_agent",
     "get_agent",
@@ -55,7 +49,7 @@ def _check_market_source() -> None:
             log.info("assets-api reachable at %s", config.ASSETS_API_BASE_URL)
         except Exception as e:
             log.error(
-                "assets-api unreachable at %s — solves and MTM will fail until it is up "
+                "assets-api unreachable at %s — solves will fail until it is up "
                 "(or set MARKET_DATA_SOURCE=synthetic): %s",
                 config.ASSETS_API_BASE_URL,
                 e,
@@ -68,27 +62,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_engine()
     async with get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-    stop = asyncio.Event()
-    task = asyncio.create_task(run_mtm_loop(get_bus(), stop, sessionmaker=get_sessionmaker()))
-    try:
-        yield
-    finally:
-        stop.set()
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        # Note: the engine is process-wide and intentionally NOT disposed here —
-        # tests share it across many app instances and own its lifecycle.
+    yield
+    # Note: the engine is process-wide and intentionally NOT disposed here —
+    # tests share it across many app instances and own its lifecycle.
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="QTW 2026 Trading Game", lifespan=lifespan)
+    app = FastAPI(title="Qubitrefill", lifespan=lifespan)
     app.add_middleware(APIKeyMiddleware)
     app.include_router(routes.router)
-    app.include_router(ws.router)
 
     # Mount the MCP server in-process, after the routers so it reads the populated
     # OpenAPI schema. fastapi-mcp dispatches each tool through this app's own ASGI

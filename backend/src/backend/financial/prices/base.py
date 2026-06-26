@@ -1,6 +1,6 @@
 """Market-data source interface.
 
-Everything downstream (estimators, pnl, job, scheduler) reads market data through
+Everything downstream (estimators, job) reads market data through
 this protocol, so the assets-api client and the synthetic stand-in
 are interchangeable — selected by ``config.MARKET_DATA_SOURCE`` with no pipeline
 changes.
