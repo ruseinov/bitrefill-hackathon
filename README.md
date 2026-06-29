@@ -42,8 +42,8 @@ backend yourself. Five steps from clone to first run:
 4. **Register to get your API key.** With the placeholder still in place, start Claude Code and ask
    the agent to proceed. `register_agent` is a **public** tool — it works without a valid key — and it
    is called with your `config.defaults` (name, email, sliders); the server **emails your API key** to
-   that address (it is never shown in the response). A repeat name or email returns `409 already
-   registered`.
+   that address (it is never shown in the response). A repeat email or name returns `409` with detail
+   `email already registered` / `name already taken` (or `email or name already taken`).
 
 5. **Paste the key and reconnect.** Put the emailed key into `.mcp.json`, replacing the placeholder in
    the `Authorization` header:
