@@ -59,6 +59,8 @@ server](#connect-the-mcp-server)). Fields:
 the first source in `funding.priority` that covers the price:
 
 - `account_match` — Bitrefill account balance held in the worst-performing asset → sells it → **retunes**.
+  Bitrefill sub-accounts are limited to `XBT`/`USD`/`EUR`, so this only applies when the worst
+  performer is **BTC**; for any other asset it is skipped and the waterfall falls through.
 - `onchain_match` — on-chain wallet holdings of the worst-performing asset → sells it → **retunes**.
 - `account_fiat` — Bitrefill USD/EUR balance → settles without selling crypto → **no retune**.
 
@@ -187,8 +189,11 @@ The skill then runs the flow from `SKILL.md`:
 
 0. **Read config** — `skills/qupick/config.json` (defaults, funding order). Missing/malformed
    → fully interactive fallback, no crash.
-1. **Available currencies** — static map of Bitrefill-payable crypto (BTC, ETH, BNB, SOL, XRP, USDT,
-   USDC, DOGE, ZEC, ALGO, FIL).
+1. **Available currencies** — static map of which holdings are spendable. Of the 11 basket tickers,
+   only **BTC, ETH, SOL, USDC, USDT** have a `buy-products` rail; the other six (BNB, XRP, DOGE,
+   ZEC, ALGO, FIL) are held for diversification but can't fund a purchase. Stablecoins are
+   multi-rail (`usdc_base`/`usdc_solana`/…, `usdt_trc20`/…), matched against the product's accepted
+   methods live.
 2. **Check + seed agent (MCP)** — `ping_backend`; if the qupick tools are missing, offer to start the
    server. Then `get_agent` (success → reuse the basket), or `register_agent` from `config.defaults`
    → set `QUPICK_API_KEY` from the emailed/console key, reconnect MCP, then `optimize` for the first solve.
@@ -196,7 +201,8 @@ The skill then runs the flow from `SKILL.md`:
    `payment_methods`; `denomination.policy` auto-selects the package.
 4. **Market (MCP)** — `get_market` for per-asset μ, units, USD value.
 5. **Select + fund** — compute the worst performer (`min(μ)`) over held, product-accepted crypto, then
-   read `GET /accounts/balance` and resolve `funding.priority` to the first source covering the price.
+   read account balances (the `account_balances` block from `product-details`, falling back to
+   `GET /accounts/balance`) and resolve `funding.priority` to the first source covering the price.
 6. **Confirm + buy (MCP)** — the agent **stops for your explicit approval** at a fully-resolved
    screen (worst performer + chosen funding source), then buys: instant `balance` pay, or an on-chain link it
    polls to `complete`. Surfaces the redemption code.
@@ -217,7 +223,7 @@ Product:  Steam USD $20 ($21.60, +2% buffer → $22.03) · accepts bitcoin/ether
 Worst:    BTC (μ=-0.0026)
 Waterfall: account_match → Bitrefill account BTC $60 covers $22.03 ✓
 Settle:   Bitrefill account BTC · sells it ✓ · will retune
-Buy:      payment_method="balance", auto_pay=true → complete → redemption code
+Buy:      payment_method="balance", balance_currency="XBT" → complete → redemption code
 Retune:   drop BTC, re-optimize over the remaining 10 currencies
 ```
 
