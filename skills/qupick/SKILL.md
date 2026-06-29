@@ -412,10 +412,11 @@ an `unpaid` invoice with a pay address — must be **polled automatically until 
    `unpaid → payment_detected → payment_confirmed → complete`):
    - `payment_confirmed` → the crypto was actually spent; the worst performer is sold. The retune
      gate (step 7) is now satisfied — retune immediately, then keep polling for delivery.
-   - `complete` → fetch the redemption code / PIN / QR and finish.
-   - `expired`, or the cap elapses with the invoice still `unpaid` → **stop** and report that the
-     invoice expired unpaid (no sale, so **no retune** — the worst performer was never spent). Offer
-     to re-issue a fresh invoice.
+   - `complete` → read the redemption code / PIN / QR from `get-invoice-by-id` (this Bitrefill MCP
+     server does not expose `get-order-by-id` — see the step-6 note) and finish.
+   - the **time cap (or the invoice's expiry) elapses** with the invoice still `unpaid` — i.e. it
+     never reached `payment_confirmed` → **stop** and report the invoice expired unpaid (no sale, so
+     **no retune** — the worst performer was never spent). Offer to re-issue a fresh invoice.
    - a **partial / underpaid** invoice (amount received below the total) → stop and surface the
      shortfall; do not retune. The user must top up or request a refund.
 
