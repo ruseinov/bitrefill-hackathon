@@ -403,19 +403,21 @@ an `unpaid` invoice with a pay address — must be **polled automatically until 
 
 1. Show the pay address / link / amount once, so the user can broadcast the transaction.
 2. Then poll `get-invoice-by-id` on a fixed cadence — roughly **every 30 s**, automatically, without
-   waiting for the user — until the invoice reaches a terminal state. **Cap the loop at the
-   invoice's own `expiration_minutes`** (≈60 min; fall back to 60 min if the field is absent). Space
-   the polls with a wait that survives across turns (schedule the next re-check) rather than blocking
-   the session, and do **not** prompt the user between polls.
-3. **Terminal states:**
+   waiting for the user — until the invoice reaches a terminal status. **Cap the loop at ~60 min** (or
+   the invoice's own expiry, if it reports one) so the loop always terminates even if no terminal
+   status ever arrives. If the runtime can schedule a cross-turn wake-up, space the polls with one
+   rather than blocking the session; otherwise fall back to a blocking wait or polling on the user's
+   next message. Do **not** prompt the user between polls.
+3. **Terminal states** (the Bitrefill reference documents the status enum as
+   `unpaid → payment_detected → payment_confirmed → complete`):
    - `payment_confirmed` → the crypto was actually spent; the worst performer is sold. The retune
      gate (step 7) is now satisfied — retune immediately, then keep polling for delivery.
-   - `complete` / `all_delivered` → fetch the redemption code / PIN / QR and finish.
+   - `complete` → fetch the redemption code / PIN / QR and finish.
    - `expired`, or the cap elapses with the invoice still `unpaid` → **stop** and report that the
      invoice expired unpaid (no sale, so **no retune** — the worst performer was never spent). Offer
      to re-issue a fresh invoice.
-   - `partial_payment: true` → stop and surface the shortfall; do not retune. The user must top up or
-     request a refund.
+   - a **partial / underpaid** invoice (amount received below the total) → stop and surface the
+     shortfall; do not retune. The user must top up or request a refund.
 
 A user "check" / "poll" message during the window just triggers an immediate extra poll — it is
 never *required* to advance the flow.
