@@ -32,8 +32,9 @@ or a deployed HTTPS endpoint such as `https://qupick.quip.network/mcp`. Drive it
 | `mcp__qupick__get_leaderboard` | scoreboard (public) |
 
 **Auth.** Every per-agent tool (`get_agent`, `optimize`, `get_market`) carries the agent's API
-key as `Authorization: Bearer <key>`, configured once in `.mcp.json`
-(`"Authorization": "Bearer ${QUPICK_API_KEY}"`). Set `QUPICK_API_KEY` to the key from
+key as `Authorization: Bearer <key>`, configured once in `.mcp.json` by pasting the key **literally**
+into the header (`"Authorization": "Bearer <key>"`). Claude Code does **not** expand `${VAR}` in
+`.mcp.json` headers, so an environment variable won't reach the server — use the literal key from
 registration (see step 2). The public tools work without it.
 
 The only `curl` left in this flow is the read-only Bitrefill balance endpoint (step 5b):
@@ -50,8 +51,8 @@ step 6 always fires.
 
 MCP server: `qupick` (the backend's `/mcp` transport — local `http://127.0.0.1:8000/mcp` or the
 deployed URL configured in `.mcp.json`). Tools return JSON; a failed
-per-agent call surfaces the backend's `{"detail": "..."}` (e.g. `401` when `QUPICK_API_KEY` is
-unset/wrong, `422` on validation, `503` on no feasible solution).
+per-agent call surfaces the backend's `{"detail": "..."}` (e.g. `401` when the `.mcp.json` Bearer key
+is unset/wrong, `422` on validation, `503` on no feasible solution).
 
 ### `register_agent` — create agent (public)
 
@@ -93,7 +94,7 @@ In local dev (no `SMTP_PASSWORD` on the backend) the key is **printed to the bac
 
 **Returns** (`AgentConfig`): name, handle, email, `sliders`, and the current `assets` basket. Use
 it to retrieve the basket when re-using an agent — and as the **"am I registered?" probe**: a
-success means the configured key is valid; a 401 means register (or set `QUPICK_API_KEY`) first.
+success means the configured key is valid; a 401 means register (or paste the key into `.mcp.json`) first.
 
 ### `optimize` — optimise (and optionally retune) (authed)
 
@@ -199,9 +200,9 @@ Load `skills/qupick/config.json` (mirror of the committed `config.example.json`)
 }
 ```
 
-- Identity is **not** in `config.json`. The agent's API key lives in `QUPICK_API_KEY` (read by
-  `.mcp.json` as the `Authorization: Bearer` header). "Already registered?" is answered by
-  `get_agent` succeeding, not by a stored id.
+- Identity is **not** in `config.json`. The agent's API key lives **directly** in the `.mcp.json`
+  `Authorization: Bearer` header (Claude Code does not expand `${VAR}` there). "Already registered?"
+  is answered by `get_agent` succeeding, not by a stored id.
 - `defaults` — name / email / country / sliders, used only when creating a new agent and for product country.
 - `funding.priority` — settlement order (see step 5). `funding.fee_buffer_pct` — coverage buffer (default 2). `funding.on_shortfall` — `reject` | `confirm`.
 - `denomination.policy` — `smallest_gte` auto-picks the smallest package ≥ the requested amount.
@@ -249,11 +250,12 @@ The deployed server is remote and always-on — there is nothing to start, so a 
 situation there is a **wiring** problem, not a down-server problem. Deployed wiring:
 
 ```jsonc
-// .mcp.json — point qupick at the deployed server; the key travels as the Bearer header
+// .mcp.json — point qupick at the deployed server; paste the key literally into the Bearer header
+// (Claude Code does NOT expand ${VAR} in .mcp.json headers; this file is gitignored, so it is safe)
 { "mcpServers": { "qupick": {
     "type": "http",
     "url": "https://qupick.quip.network/mcp",
-    "headers": { "Authorization": "Bearer ${QUPICK_API_KEY}" } } } }
+    "headers": { "Authorization": "Bearer <key>" } } } }
 ```
 
 **Server up?** The qupick MCP server rides on the backend over HTTP, so it must be reachable
@@ -261,8 +263,8 @@ situation there is a **wiring** problem, not a down-server problem. Deployed wir
 
 - **Tools present:** call `mcp__qupick__ping_backend` → `{"ok": true}` and proceed.
 - **Tools missing — deployed target:** the `.mcp.json` `qupick` entry is absent or its URL is wrong.
-  Wire it to the deployed `/mcp` URL with the `Authorization: Bearer ${QUPICK_API_KEY}` header
-  (above), then **reconnect the MCP server** (run `/mcp` in Claude Code) — the tools won't appear
+  Wire it to the deployed `/mcp` URL with the `Authorization: Bearer <key>` header (above, key pasted
+  literally), then **reconnect the MCP server** (run `/mcp` in Claude Code) — the tools won't appear
   mid-session otherwise. No docker compose involved; the box is managed separately.
 - **Tools missing — local target:** the local stack was down at session start. **Offer to start it**,
   and on the user's yes bring up the full stack (Postgres + backend) with docker compose from the
@@ -282,10 +284,10 @@ situation there is a **wiring** problem, not a down-server problem. Deployed wir
 
 **Already registered?** Call `mcp__qupick__get_agent`:
 
-- **Succeeds** → the configured `QUPICK_API_KEY` is valid. Read the returned `assets` basket; skip
-  creation.
-- **401** → no valid key. Either `QUPICK_API_KEY` is unset/stale, or there is no agent yet —
-  create one (below).
+- **Succeeds** → the key in the `.mcp.json` Bearer header is valid. Read the returned `assets`
+  basket; skip creation.
+- **401** → no valid key. Either the `.mcp.json` Bearer key is a placeholder/stale, or there is no
+  agent yet — create one (below).
 
 **Create.** Seed over the available Bitrefill currencies, using `config.defaults`:
 
@@ -301,8 +303,8 @@ mcp__qupick__register_agent({
 
 The API key is **emailed, not returned**. Retrieve it — from the email, or in local dev (no
 `SMTP_PASSWORD`) from the backend container logs (`docker compose logs backend`), line
-`[email:console] API key for <name> <<email>>: <key>` — then **set `QUPICK_API_KEY` to it and
-reconnect the MCP server (`/mcp`)** so the per-agent tools authenticate.
+`[email:console] API key for <name> <<email>>: <key>` — then **paste it into the `.mcp.json`
+`Authorization` header and reconnect the MCP server (`/mcp`)** so the per-agent tools authenticate.
 Once `get_agent` succeeds, optimise immediately for the first solve (no arguments):
 
 ```
@@ -347,7 +349,7 @@ The **worst performer** is `min(μ)` across these candidates. If there are no sp
 | Token | Source | Pays via | Sells it? | Retune? |
 |-------|--------|----------|--------------|---------|
 | `account_match` | Bitrefill account balance held in the worst-performing asset — **only possible when the worst performer is BTC** (account sub-accounts are limited to `XBT`/`USD`/`EUR`) | `buy-products(payment_method:"balance", balance_currency:"XBT")` | yes | yes |
-| `onchain_match` | Wallet holdings of the worst-performing asset | `buy-products(payment_method:<a rail for MAP[worst]>, return_payment_link:true)` → pay link → poll | yes | yes |
+| `onchain_match` | Wallet holdings of the worst-performing asset | `buy-products(payment_method:<a rail for MAP[worst]>, return_payment_link:true)` → pay link → auto-poll (step 6a) | yes | yes |
 | `account_fiat` | Bitrefill USD/EUR account balance | `buy-products(payment_method:"balance", balance_currency:"USD"\|"EUR")` | no | no |
 
 - `account_match` applies **only when the worst performer is BTC** — `buy-products` can debit a
@@ -387,10 +389,39 @@ the entry for multiples; `package_id` is deprecated). Balance payments settle in
 `auto_pay` flag — pick the sub-account with `balance_currency`:
 - `account_match`: `buy-products(cart_items=[{product_id, package_value}], payment_method="balance", balance_currency="XBT")` → instant.
 - `account_fiat`: `buy-products(cart_items=[{product_id, package_value}], payment_method="balance", balance_currency="USD"|"EUR")` → instant.
-- `onchain_match`: `buy-products(cart_items=[{product_id, package_value}], payment_method=<a rail for MAP[worst]>, return_payment_link=true)` → pay via the returned link → poll `get-invoice-by-id` until `status == "complete"`.
+- `onchain_match`: `buy-products(cart_items=[{product_id, package_value}], payment_method=<a rail for MAP[worst]>, return_payment_link=true)` → returns an `unpaid` invoice with a pay address / link → **auto-poll** (step 6a).
 
 Then read `get-invoice-by-id` for the delivered redemption code / PIN / QR (there is no
 `get-order-by-id` tool). Log: `invoice_id`, product, amount, chosen funding token, payment method.
+
+### 6a. Auto-poll crypto payments — no user prompts
+
+Balance settlements (`account_match` / `account_fiat`) clear instantly, so they skip this step. Any
+**conventional crypto payment** — `onchain_match`, or any `return_payment_link` path that hands back
+an `unpaid` invoice with a pay address — must be **polled automatically until it settles**, with no
+"say check to poll" round-trips:
+
+1. Show the pay address / link / amount once, so the user can broadcast the transaction.
+2. Then poll `get-invoice-by-id` on a fixed cadence — roughly **every 30 s**, automatically, without
+   waiting for the user — until the invoice reaches a terminal status. **Cap the loop at ~60 min** (or
+   the invoice's own expiry, if it reports one) so the loop always terminates even if no terminal
+   status ever arrives. If the runtime can schedule a cross-turn wake-up, space the polls with one
+   rather than blocking the session; otherwise fall back to a blocking wait or polling on the user's
+   next message. Do **not** prompt the user between polls.
+3. **Terminal states** (the Bitrefill reference documents the status enum as
+   `unpaid → payment_detected → payment_confirmed → complete`):
+   - `payment_confirmed` → the crypto was actually spent; the worst performer is sold. The retune
+     gate (step 7) is now satisfied — retune immediately, then keep polling for delivery.
+   - `complete` → read the redemption code / PIN / QR from `get-invoice-by-id` (this Bitrefill MCP
+     server does not expose `get-order-by-id` — see the step-6 note) and finish.
+   - the **time cap (or the invoice's expiry) elapses** with the invoice still `unpaid` — i.e. it
+     never reached `payment_confirmed` → **stop** and report the invoice expired unpaid (no sale, so
+     **no retune** — the worst performer was never spent). Offer to re-issue a fresh invoice.
+   - a **partial / underpaid** invoice (amount received below the total) → stop and surface the
+     shortfall; do not retune. The user must top up or request a refund.
+
+A user "check" / "poll" message during the window just triggers an immediate extra poll — it is
+never *required* to advance the flow.
 
 ### 7. Retune (MCP) — only if the worst performer was sold
 
@@ -410,7 +441,7 @@ mcp__qupick__optimize({
 
 > "Buy a $20 Steam gift card and dump my worst crypto"
 
-1. **Config** — `config.json` has `funding.priority = ["account_match","onchain_match","account_fiat"]`, `denomination.policy = smallest_gte`; `QUPICK_API_KEY` is set.
+1. **Config** — `config.json` has `funding.priority = ["account_match","onchain_match","account_fiat"]`, `denomination.policy = smallest_gte`; the `.mcp.json` Bearer key is set.
 2. **Currencies** — static map gives 11 tickers.
 3. **Agent** — `get_agent` succeeds → read the basket; skip creation.
 4. **Product** — `search-products("Steam", country="US")` → `steam-usa`; `product-details` → `smallest_gte($20)` picks `package_value = "20"`, price $21.60, accepts `bitcoin`/`ethereum`/`solana`/`usdc_base`.
@@ -427,7 +458,7 @@ This skill executes real-money purchases. See [`skills/bitrefill/references/safe
 - Confirm before every purchase — step 6 is the single, non-negotiable approval stop. `buy-products` is deliberately **not** on the Claude Code allowlist, so the harness also prompts.
 - Stop before `buy-products` unless the user opts into a real purchase (real money).
 - Treat codes as cash — never log or paste redemption codes in public channels.
-- Use a dedicated low-balance account. `config.json` (real email) and `QUPICK_API_KEY` (the agent's secret key) are local-only — `config.json` is gitignored and the key never goes in git.
+- Use a dedicated low-balance account. `config.json` (real email) and the API key in `.mcp.json` (the agent's secret key) are local-only — both files are gitignored, so the key never goes in git.
 - Log every purchase: `invoice_id`, product, amount, funding token, method.
 
 The retune in step 7 is irreversible — when it fires, the spent asset is removed from the basket permanently until the user re-adds it manually. It fires only when the worst performer was actually sold (`account_match` / `onchain_match`).

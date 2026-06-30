@@ -16,13 +16,13 @@ Locked choices that the rest of this doc assumes:
 |------|--------|-------------|
 | **Postgres** | Company **Supabase** | `DATABASE_URL` → Supabase **session pooler, port 5432** (long-running service). Prefer a **dedicated project or schema** — startup `create_all` should not share company tables. |
 | **Email** | **Resend** (org-owned account) | `SmtpEmailSender` over `smtp.resend.com` (STARTTLS); sender `noreply@quip.network` (domain verified in Resend). Username is the literal `resend`; password is the Resend API key. Plain SMTP, so switching relays later is env-only. **DigitalOcean blocks outbound 25/465/587 → set `SMTP_PORT=2587`** (see §4). Use an **org-owned** account, not a personal one — registration mail carries the API key. |
-| **Hosting** | **DigitalOcean droplet + Caddy** | Single instance is fine but **no longer forced** — the background mark-to-market loop was removed, so the server holds no in-process state. Caddy does auto-HTTPS and SSE pass-through for `/mcp`. `create_all` on a shared DB is the only multi-instance concern (see §7). |
+| **Hosting** | **DigitalOcean droplet + Caddy** | Single instance is fine but **no longer forced** — the background mark-to-market loop was removed, so the server holds no in-process *application* state. (The mounted MCP server still keeps per-worker session state, which is why `WEB_CONCURRENCY` is pinned to `1` — see the Concurrency row.) Caddy does auto-HTTPS and SSE pass-through for `/mcp`. `create_all` on a shared DB is the only multi-instance concern (see §7). |
 | **Audience** | **Internal-only** | Per-agent bearer auth is sufficient; rate-limiting public registration is a nice-to-have, not a launch blocker. |
 | **Schema** | Keep startup `create_all` | Fastest to launch; no migration tooling yet (see §7). Re-evaluate before the first schema change. |
 | **Subdomain** | e.g. `qupick.quip.network` | Pointed at the droplet; image pushed to `registry.gitlab.com/quip.network/qupick` (amd64). |
 | **Solvers** | **SA-only for v1 (PoC/MVP)** | `GUROBI_IN_RACE=0` (no Gurobi license in prod) and `DWAVE_API_TOKEN` unset (no QPU cost). Simulated annealing is the entire race field and always runs. Reversible later via env alone — re-add Gurobi or the QPU without a code change or image rebuild. |
 | **Market data** | **Live assets-api** | `MARKET_DATA_SOURCE=assets-api` pointed at `https://asset-tracker.quip.network`, so the μ/Σ inputs reflect real market conditions. Adds a runtime dependency on that service being reachable; `synthetic` stays the offline fallback if it is down or unbuilt. |
-| **Concurrency** | **Scale workers to vCPU** | `WEB_CONCURRENCY` = the droplet's vCPU count. The server is stateless in-process (no background loops), so this is safe; keep `workers × ~15` DB connections under the Supabase pooler cap. |
+| **Concurrency** | **Pin `WEB_CONCURRENCY=1`** | The mounted MCP server (`FastApiMCP.mount_http`) keeps its Streamable-HTTP session table **in each worker's memory** (fastapi-mcp 0.4.0 hardcodes `stateless=False`). With >1 uvicorn worker and no shared session store or sticky routing, a session minted on worker A 404s when a follow-up (`tools/list`, tool calls) round-robins to worker B — intermittent MCP failures. The CPU-bound solve already offloads via `asyncio.to_thread`, so one worker handles concurrent requests fine. To scale workers you must first make MCP stateless or add a shared session backend. |
 
 ---
 
@@ -33,7 +33,7 @@ Locked choices that the rest of this doc assumes:
 | **Backend** | FastAPI app (`backend.api.app:app`) serving REST + the `/mcp` transport on port `8000` | Containerized (`backend/Dockerfile`); this is the qupick MCP server |
 | **PostgreSQL** | Holds agents (the API keys) and jobs | The `db` service in `docker-compose.yml` is dev-grade only |
 | **assets-api** | External market-data price service (REST, SQLite-backed) | Separate service; only needed when `MARKET_DATA_SOURCE=assets-api` |
-| **qupick skill + client** | Claude Code side that calls the MCP server and Bitrefill | Needs `QUPICK_API_KEY` and `BITREFILL_API_KEY` |
+| **qupick skill + client** | Claude Code side that calls the MCP server and Bitrefill | Needs the agent's qupick API key (in the `.mcp.json` Bearer header) and `BITREFILL_API_KEY` |
 
 The `docker-compose.yml` in the repo is a **dev stack** (weak Postgres password,
 `MARKET_DATA_SOURCE: synthetic`, console email). Treat it as a reference, not a
@@ -68,7 +68,7 @@ backend.
 | Service | Why it's needed | What to obtain | Cost / gotchas |
 |---------|-----------------|----------------|----------------|
 | **Bitrefill** (https://www.bitrefill.com) | The qupick purchase flow buys gift cards / settles invoices via the bitrefill skill | An account API key (`BITREFILL_API_KEY`) and a **funded, low-balance** account/wallet | Real money. Use a dedicated low-balance account. Local-only — never commit, never set server-side. |
-| **A registered qupick agent** | Per-agent MCP tools authenticate with its key | `QUPICK_API_KEY` (emailed at registration by the backend) | Stored client-side in `.mcp.json` / env, not on the server. |
+| **A registered qupick agent** | Per-agent MCP tools authenticate with its key | The agent's API key (emailed at registration by the backend) | Pasted literally into the `.mcp.json` Bearer header client-side (gitignored), not stored on the server. |
 
 ---
 
@@ -89,7 +89,7 @@ secret store, **never** in git or the image.
 | `ASSETS_API_BASE_URL` | `http://127.0.0.1:8080` | Set to `https://asset-tracker.quip.network` (the live assets-api) |
 | `GUROBI_IN_RACE` | `1` | Set `0` in production (no Gurobi license there) |
 | `PORT` | `8000` | Internal listen port behind Caddy (e.g. `8080`) |
-| `WEB_CONCURRENCY` | `1` | uvicorn worker count; safe to raise (stateless), keep `workers × ~15` DB conns under the pooler cap |
+| `WEB_CONCURRENCY` | `1` | uvicorn worker count; **keep at `1`** — MCP sessions are per-worker in-memory, so >1 worker 404s MCP intermittently (see Concurrency row). Raising it needs stateless MCP or a shared session store first |
 
 **Optional / tuning:**
 
@@ -107,7 +107,7 @@ secret store, **never** in git or the image.
 
 | Env var | Used by | Notes |
 |---------|---------|-------|
-| `QUPICK_API_KEY` | `.mcp.json` Bearer header → per-agent MCP tools | The agent's key, emailed at registration. Unset → public tools work, per-agent tools 401 |
+| `QUPICK_API_KEY` | `backend/scripts/mcp_smoke.py` only (authed-call check) | The agent's key, emailed at registration. **`.mcp.json` does not read this var** — paste the key literally into its Bearer header (Claude Code doesn't expand `${VAR}` in headers). A placeholder/invalid key → public tools work, per-agent tools 401 |
 | `BITREFILL_API_KEY` | the bitrefill skill (`Authorization: Bearer`) | Funds the purchase flow |
 
 ---
