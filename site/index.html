@@ -129,6 +129,40 @@
   .pipeline .lead{margin:0 auto 38px}
   .pipeline img{width:100%;max-width:1000px;height:auto;border-radius:var(--radius);box-shadow:0 18px 44px rgba(12,40,24,.12)}
 
+  /* ---------- Get started ---------- */
+  .start{padding:88px 0;border-bottom:1px solid var(--line);background:var(--paper-2)}
+  .start .head{text-align:center;margin:0 auto 48px}
+  .start h2{font-size:clamp(1.9rem,3.4vw,2.6rem);margin-bottom:14px}
+  .start .head .lead{margin:0 auto}
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;align-items:stretch}
+  .step{
+    background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+    padding:26px 24px;text-align:left;display:flex;flex-direction:column;
+    box-shadow:0 14px 36px rgba(12,40,24,.06);
+  }
+  .step .n{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:32px;height:32px;border-radius:999px;background:var(--green);color:#fff;
+    font-family:var(--mono);font-size:14px;font-weight:600;margin-bottom:16px;
+  }
+  .step h3{font-size:1.2rem;margin-bottom:10px}
+  .step p{color:var(--ink-soft);font-size:.98rem;margin:0 0 16px}
+  .step code{font-family:var(--mono);font-size:.88em;color:var(--ink);background:rgba(12,20,16,.05);padding:1px 5px;border-radius:5px}
+  .code{
+    margin-top:auto;background:var(--ink);border-radius:12px;padding:14px 16px;
+    font-family:var(--mono);font-size:13px;line-height:1.65;color:#cdd8d1;
+    white-space:pre;overflow-x:auto;
+  }
+  .code .c{color:var(--green-bright)}
+  .code code{background:none;color:inherit;padding:0}
+  .ask{
+    margin-top:auto;background:rgba(22,163,74,.06);border:1px solid rgba(22,163,74,.28);
+    border-radius:12px;padding:15px 17px;color:var(--ink);font-size:1.02rem;
+    font-style:italic;line-height:1.5;
+  }
+  .start .cta{display:flex;gap:14px;justify-content:center;margin-top:40px;flex-wrap:wrap}
+  @media(max-width:860px){.steps{grid-template-columns:1fr}}
+
   /* ---------- Footer ---------- */
   footer{padding:64px 0 56px;background:var(--ink);color:#cdd8d1}
   footer .wrap{display:grid;grid-template-columns:1.4fr 1fr;gap:40px;align-items:start}
@@ -152,6 +186,7 @@
       <a href="#qubo">QUBO</a>
       <a href="#pipeline">Pipeline</a>
       <a href="#edge">The edge</a>
+      <a href="#start">Get started</a>
     </nav>
   </div>
 </header>
@@ -287,6 +322,52 @@
     </div>
     <div class="art">
       <img src="assets/wells.png" alt="Crypto assets rendered as wells on a 3D cost surface, with ZEC and SOL deepest" />
+    </div>
+  </div>
+</section>
+
+<!-- ============== 6. GET STARTED ============== -->
+<section class="start" id="start">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Get started</p>
+      <h2>Three steps to first run</h2>
+      <p class="lead">
+        Install the skill into Claude Code, connect it to the hosted quantum backend, then
+        ask in plain English. There's no backend to run yourself.
+      </p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <span class="n">1</span>
+        <h3>Install the skill</h3>
+        <p>Drop <code>qupick</code> and its sibling <code>bitrefill</code> into Claude Code together.</p>
+        <div class="code"><span class="c">cp -R</span> skills/qupick    .claude/skills/
+<span class="c">cp -R</span> skills/bitrefill .claude/skills/</div>
+      </div>
+      <div class="step">
+        <span class="n">2</span>
+        <h3>Register &amp; connect</h3>
+        <p>
+          Point <code>.mcp.json</code> at the hosted server and register once — your API key is
+          emailed to you. Paste it into the <code>Authorization</code> header and reconnect.
+        </p>
+        <div class="code"><span class="c">url</span>   qupick.quip.network/mcp
+<span class="c">auth</span>  Bearer &lt;key-from-email&gt;</div>
+      </div>
+      <div class="step">
+        <span class="n">3</span>
+        <h3>Just ask</h3>
+        <p>
+          The agent picks your worst-performing asset, settles the bill, then retunes the rest of
+          the basket around it.
+        </p>
+        <div class="ask">"Buy a $20 Steam card and pay with my worst-performing crypto."</div>
+      </div>
+    </div>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/QuipNetwork/qubitrefill#readme" target="_blank" rel="noopener">Full setup guide → README ↗</a>
+      <a class="btn ghost" href="https://github.com/QuipNetwork/qubitrefill" target="_blank" rel="noopener">View Repo ↗</a>
     </div>
   </div>
 </section>
