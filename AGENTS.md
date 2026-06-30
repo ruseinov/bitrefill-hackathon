@@ -6,23 +6,20 @@ Guidance for coding agents working in this repository.
 
 ### Bitrefill
 
-The **bitrefill** skill (purchase mechanics — gift cards, mobile top-ups, eSIMs; pay with crypto, Lightning, USDC via x402, or pre-funded account balance) is an **external prerequisite**, not vendored here. Install it from upstream:
+qupick's purchase layer is the **Bitrefill MCP** (`https://api.bitrefill.com/mcp`) — the `mcp__bitrefill__*` tools (`search-products`, `product-details`, `buy-products`, `get-invoice-by-id`). That MCP is the only hard dependency, and nothing from Bitrefill is vendored here. Connect it separately:
 
-```
-/plugin marketplace add bitrefill/agents
-/plugin install bitrefill@bitrefill-skills
-/reload-plugins
+```bash
+claude mcp add --transport http bitrefill https://api.bitrefill.com/mcp --scope user
 ```
 
-This registers the skill and its eCommerce MCP (`https://api.bitrefill.com/mcp`, OAuth or API key on first use). The installed skill routes by host capability and carries the full spending safeguards — read its own `SKILL.md` and reference link-outs before any purchase.
+Optionally, the upstream **bitrefill plugin** bundles the same MCP plus the bitrefill *skill* (capability routing, CLI/browse/REST fallbacks, safeguards prose) — `/plugin install bitrefill@bitrefill-skills` (<https://github.com/bitrefill/agents>). qupick uses only the MCP tools, not the skill's mechanics.
 
-- **Upstream:** <https://github.com/bitrefill/agents>
 - **Enum/endpoint source of truth:** <https://docs.bitrefill.com>
 - **Real money:** codes deliver instantly and are non-refundable. Confirm product, price, and payment method before buying; use a dedicated low-balance account; never expose high-balance accounts or wallet seeds.
 
 ### Qupick
 
-Vendored at [`skills/qupick/SKILL.md`](skills/qupick/SKILL.md). Delegates purchase mechanics to the bitrefill skill above and adds portfolio selection on top.
+Vendored at [`skills/qupick/SKILL.md`](skills/qupick/SKILL.md). Delegates purchase mechanics to the Bitrefill MCP above and adds portfolio selection on top.
 
 **Triggers:** "pay with my worst performer", "use my worst crypto to buy X".
 

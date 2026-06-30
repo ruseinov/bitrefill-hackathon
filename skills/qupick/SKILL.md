@@ -1,7 +1,7 @@
 ---
 name: qupick
 description: "This skill uses quantum computers to pick the best crypto asset to pay with, given current market conditions."
-compatibility: "Requires: (1) the qupick MCP server (the portfolio backend's /mcp transport) wired into .mcp.json as an HTTP MCP — local dev http://127.0.0.1:8000/mcp or a deployed instance such as https://qupick.quip.network/mcp — exposing mcp__qupick__* tools; (2) the bitrefill skill + its Bitrefill MCP (https://api.bitrefill.com/mcp), installed separately via /plugin install bitrefill@bitrefill-skills; (3) a local skills/qupick/config.json (see config.example.json). Delegates all purchase mechanics to the bitrefill skill."
+compatibility: "Requires: (1) the qupick MCP server (the portfolio backend's /mcp transport) wired into .mcp.json as an HTTP MCP — local dev http://127.0.0.1:8000/mcp or a deployed instance such as https://qupick.quip.network/mcp — exposing mcp__qupick__* tools; (2) the Bitrefill MCP (https://api.bitrefill.com/mcp) connected — the mcp__bitrefill__* tools that drive every purchase; add it with claude mcp add or the upstream bitrefill plugin; (3) a local skills/qupick/config.json (see config.example.json). Delegates all purchase mechanics to the Bitrefill MCP."
 metadata:
   author: hackathon
   version: "5.3.0"
@@ -11,7 +11,7 @@ metadata:
 
 Identify the most suitable crypto in the portfolio (lowest annualised expected return) using a quantum unconstrained binary optimization, settle a Bitrefill product against the cheapest available funding source, then retune the portfolio only if the chosen crypto was actually sold.
 
-Delegates all purchase mechanics to the **bitrefill** skill — install it separately (`/plugin marketplace add bitrefill/agents` → `/plugin install bitrefill@bitrefill-skills` → `/reload-plugins`; upstream <https://github.com/bitrefill/agents>), then read and invoke it for product search, pricing, buying, and payment polling. This skill adds portfolio seeding, selection logic, and an account-aware funding waterfall on top.
+Delegates all purchase mechanics to the **Bitrefill MCP** (`mcp__bitrefill__*` tools) — connect it separately (`claude mcp add --transport http bitrefill https://api.bitrefill.com/mcp`, or install the upstream bitrefill plugin which bundles it; <https://github.com/bitrefill/agents>), then invoke it for product search, pricing, buying, and payment polling. This skill adds portfolio seeding, selection logic, and an account-aware funding waterfall on top.
 
 The flow is designed to stop for the user in **exactly one** place — the purchase approval (step 6). Defaults, a config file, and a permission allowlist remove the other interruptions.
 
@@ -44,7 +44,7 @@ curl https://api.bitrefill.com/v2/accounts/balance -H "Authorization: Bearer $BI
 ```
 
 That one is allowlisted (write the URL first so prefix matching works). Real purchases go through
-the bitrefill skill's `buy-products`, deliberately **not** allowlisted, so the approval gate in
+the Bitrefill MCP's `buy-products`, deliberately **not** allowlisted, so the approval gate in
 step 6 always fires.
 
 ## Backend tool reference
@@ -313,7 +313,7 @@ mcp__qupick__optimize({})
 
 ### 3. Pick the product (MCP)
 
-Use the bitrefill skill's `search-products` (with `country = config.defaults.country`) → `product-details` to settle on:
+Use the Bitrefill MCP's `search-products` (with `country = config.defaults.country`) → `product-details` to settle on:
 - Product name + country
 - Price in USD (from the `packages` array — use the field `payment_price` with `payment_currency == "USD"`)
 - Accepted `payment_methods` list (from `product-details` — the authoritative per-product filter)
@@ -383,7 +383,7 @@ Settle:    [chosen source]
 Approve?
 ```
 
-After explicit approval, use the bitrefill skill to buy, mapping the chosen token to `buy-products`
+After explicit approval, use the Bitrefill MCP to buy, mapping the chosen token to `buy-products`
 arguments. Each `cart_items` entry is `{product_id, package_value}` (no `quantity` field — repeat
 the entry for multiples; `package_id` is deprecated). Balance payments settle instantly and have no
 `auto_pay` flag — pick the sub-account with `balance_currency`:
@@ -454,7 +454,7 @@ mcp__qupick__optimize({
 
 ## Safeguards
 
-This skill executes real-money purchases. The bitrefill skill carries the full spending policy; the essentials:
+This skill executes real-money purchases. The spending policy:
 - Confirm before every purchase — step 6 is the single, non-negotiable approval stop. `buy-products` is deliberately **not** on the Claude Code allowlist, so the harness also prompts.
 - Stop before `buy-products` unless the user opts into a real purchase (real money).
 - Treat codes as cash — never log or paste redemption codes in public channels.
